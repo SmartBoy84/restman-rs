@@ -1,14 +1,14 @@
 // // /v1/companies/{company id}/users/{user id}/notifications
 
-mod parts;
 pub mod endpoints;
+mod parts;
 
 use std::marker::PhantomData;
 
 use endpoints::{Endpoint, EndpointWithParameters};
 use serde::Serialize;
 
-use crate::request::endpoints::EndpointWithNoPara;
+use crate::{Server, request::endpoints::EndpointWithNoPara};
 
 pub trait QueryParameters: Serialize {
     fn add_str(&self, s: &mut String) {
@@ -67,11 +67,11 @@ pub struct ApiRequest<P: Endpoint> {
 }
 
 impl<E: Endpoint> ApiRequest<E> {
-    fn new_inner<C: RequestConfig>(c: &C, root: &str) -> Self
+    fn new_inner<C: RequestConfig>(c: &C) -> Self
     where
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
-        let mut uri = root.to_string();
+        let mut uri = <<E as Endpoint>::Ser as Server>::ROOT.to_owned();
         E::add_str(&mut uri, c);
         let uri_len = uri.len();
         Self {
@@ -83,21 +83,21 @@ impl<E: Endpoint> ApiRequest<E> {
 }
 
 impl<E: Endpoint + EndpointWithNoPara> ApiRequest<E> {
-    pub fn new<C: RequestConfig>(c: &C, root: &str) -> Self
+    pub fn new<C: RequestConfig>(c: &C) -> Self
     where
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
-        Self::new_inner(c, root)
+        Self::new_inner(c)
     }
 }
 
 impl<E: Endpoint + EndpointWithParameters> ApiRequest<E> {
-    pub fn new_with_para<C>(c: &C, p: E::P, root: &str) -> Self
+    pub fn new_with_para<C>(c: &C, p: E::P) -> Self
     where
         C: RequestConfig,
         E: SerialiseRequestPart<C>,
     {
-        let mut s = Self::new_inner(c, root);
+        let mut s = Self::new_inner(c);
         p.add_str(s.uri_mut());
         s
     }

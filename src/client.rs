@@ -26,7 +26,6 @@ pub type ApiBackendResult<O, C> = Result<O, ApiBackendError<<C as ApiHttpClient>
 pub struct ApiClient<T: ApiHttpClient> {
     inner: T,
     token: String, // token's not thaaat long to bother with lifetimes infesting code
-    root: String,
 }
 
 impl<C: ApiHttpClient> ApiClient<C> {
@@ -93,15 +92,14 @@ impl<C: ApiHttpClient> RequestHandler for ApiClient<C> {
 }
 
 impl<C: ApiHttpClient> ApiClient<C> {
-    pub(super) fn new(backend: C, token: &str, root: &str) -> Self {
+    pub fn new(backend: C, token: &str) -> Self {
         Self {
             inner: backend,
             token: token.into(),
-            root: root.to_owned(),
         }
     }
 
-    pub(super) fn get_raw(&self, uri: &str) -> ApiBackendResult<String, C> {
+    pub fn get_raw(&self, uri: &str) -> ApiBackendResult<String, C> {
         let mut s = String::new();
         self.inner
             .get(uri, &self.token)

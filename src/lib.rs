@@ -9,6 +9,10 @@ use serde::de::DeserializeOwned;
 
 type SelectedHttpClient = UreqApiHttpClient;
 
+pub trait Server {
+    const ROOT: &str;
+}
+
 pub trait HttpMethod {
     fn request<H: RequestHandler, T: DeserializeOwned, P: Endpoint>(
         handler: &H,
