@@ -23,7 +23,7 @@ pub enum ApiBackendError<E: std::error::Error> {
 
 pub type ApiBackendResult<O, C> = Result<O, ApiBackendError<<C as ApiHttpClient>::Error>>;
 
-pub(super) struct ApiClient<T: ApiHttpClient> {
+pub struct ApiClient<T: ApiHttpClient> {
     inner: T,
     token: String, // token's not thaaat long to bother with lifetimes infesting code
     root: String,
