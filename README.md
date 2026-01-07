@@ -123,9 +123,12 @@ impl MyClient {
 }
 ```
 This quickly becomes untenable when you have a large number of endpoint, and many parts to the URL. If the API changes at any point, you have to traverse through every single endpoint and change the path everytime.  
-For example, the `Company` part now resides at `/v1/location/{location id}/city/{city id}/company/{company id}`, you have to change the arguments of each method (there may tens or hundreds!), and change the `format!` method! This is illogical though, the `employee` endpoint really only needs to know the detail that it's preceeding part is `company` - everything else should be inherited implicitly. This is what my crate solves, among other things that becomes obvious with use.  
+
+For example, suppose the `company` part of the example URI now resides at `/v1/location/{location id}/city/{city id}/company/{company id}`, you have to change the arguments of each method (there may tens or hundreds!), and change the `format!` method!  
+
+This is illogical though, the `employee` endpoint really only needs to know the detail that it's preceeding part is `company` - everything else should be inherited implicitly. This is what my crate solves, among other things that becomes obvious with use.  
 
 # Example
 
-For an indepth example and explanation, refer to
+For an indepth, real-world example, refer to
 [workjam-rs](https://github.com/SmartBoy84/workjam-rs)
