@@ -9,7 +9,7 @@ For example, consider implementing the API path
 
 > In the following, argument(s) wrapped in [] are optional
 
-## RequestPart
+## `RequestPart`
 
 Everything prior to `position` is a `RequestPart` and must be defined using the
 `request_part!` macro.
@@ -53,7 +53,7 @@ request_part!(Company, "company", V1, HasCompanyID, company_id);
 > [`WorkjamRequestConfig`](https://github.com/SmartBoy84/workjam-rs/blob/main/src/config.rs) -
 > my implementation can be further simplified using the `Bon` crate
 
-## Endpoint
+## `Endpoint`
 
 The terminating part of a URL is the `Endpoint`, and must be defined separately
 using the `endpoint!` macro.\
@@ -92,7 +92,7 @@ endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara
 > URL + one does not need to mention the semantics of the earlier URL such as it
 > requiring a config parameter
 
-## ApiClient
+## `ApiClient`
 
 Finally, you are ready to make a request!
 

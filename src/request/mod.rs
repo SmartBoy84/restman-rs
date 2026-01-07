@@ -1,5 +1,3 @@
-// // /v1/companies/{company id}/users/{user id}/notifications
-
 pub mod endpoints;
 mod parts;
 
