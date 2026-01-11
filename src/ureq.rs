@@ -7,7 +7,7 @@ use ureq::{
     http::{Uri, header::AUTHORIZATION},
 };
 
-use crate::client::ApiHttpClient;
+use crate::{ApiHttpClient, Get, Patch, Post, Put};
 
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
@@ -23,8 +23,8 @@ impl UreqApiHttpClient {
 }
 
 impl ApiHttpClient for UreqApiHttpClient {
-    type Reader = BodyReader<'static>; // not streaming, so 'static is fine
-    type Error = ureq::Error;
+    type R = BodyReader<'static>; // not streaming, so 'static is fine
+    type E = ureq::Error;
 
     // uri is const - 'static enforces that
     fn set_cookie(&self, cookie: &str, uri: &'static str) {
@@ -36,8 +36,23 @@ impl ApiHttpClient for UreqApiHttpClient {
         c.insert(cookie, &uri).unwrap();
         c.release();
     }
+}
 
-    fn patch(&self, uri: &str, bearer_token: &str) -> Result<Self::Reader, Self::Error> {
+impl Get for UreqApiHttpClient {
+    fn get(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
+        Ok(self
+            .a
+            .get(uri)
+            .header(ACCEPT_LANGUAGE, "*")
+            .header(AUTHORIZATION, bearer_token)
+            .call()?
+            .into_body()
+            .into_reader())
+    }
+}
+
+impl Patch for UreqApiHttpClient {
+    fn patch(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .patch(uri)
@@ -48,36 +63,31 @@ impl ApiHttpClient for UreqApiHttpClient {
             .into_body()
             .into_reader())
     }
+}
 
-    fn put(&self, uri: &str, bearer_token: &str) -> Result<Self::Reader, Self::Error> {
-        Ok(self
-            .a
-            .put(uri)
-            .header(AUTHORIZATION, bearer_token)
-            .header(ACCEPT_LANGUAGE, "*")
-            .content_type("application/json")
-            .send(&[])?
-            .into_body()
-            .into_reader())
-    }
-    fn post(&self, uri: &str, bearer_token: &str) -> Result<Self::Reader, Self::Error> {
+impl Post for UreqApiHttpClient {
+    fn post(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .post(uri)
             .header(ACCEPT_LANGUAGE, "*")
             .header(AUTHORIZATION, bearer_token)
             .content_type("application/json")
-            .send("{}")? // needed else 404
+            .send(&[])?
             .into_body()
             .into_reader())
     }
+}
 
-    fn get(&self, uri: &str, bearer_token: &str) -> Result<Self::Reader, Self::Error> {
+impl Put for UreqApiHttpClient {
+    fn put(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
         Ok(self
             .a
-            .get(uri)
+            .put(uri)
             .header(ACCEPT_LANGUAGE, "*")
-            .call()?
+            .header(AUTHORIZATION, bearer_token)
+            .content_type("application/json")
+            .send(&[])?
             .into_body()
             .into_reader())
     }

@@ -112,6 +112,9 @@ let res: EmployeeRes = client.request(&req).unwrap();
 > You can plug in your own backend, as long as it implements the
 > restman_rs::client::ApiHttpClient trait
 
+## Custom HTTP backend
+The bare minimum is to implement `restman_rs::ApiHttpClient`, then depending on which request types required `restman_rs::{GET, PATCH, PUT, POST}`.  
+
 # Why do it this way?
 Consider the naive approach:
 ```rust

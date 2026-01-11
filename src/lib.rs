@@ -2,28 +2,26 @@ pub mod client;
 pub mod request;
 pub mod ureq;
 
-use std::{error::Error, io::Read};
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ApiBackendError<E: Error> {
+pub enum ApiBackendError<C: ApiHttpClient> {
     #[error("http error")]
-    HttpError(E),
+    HttpError(C::E),
 
     #[error("parse error")]
     ParseError(#[from] serde_json::Error),
 }
 
-pub type ApiBackendResult<T, C> = Result<T, ApiBackendError<<C as ApiHttpClient>::E>>;
+pub type ApiBackendResult<T, C> = Result<T, ApiBackendError<C>>;
 
 pub trait Server {
     const ROOT: &str;
 }
 
 pub trait ApiHttpClient {
-    type R: Read;
-    type E: Error;
+    type R: std::io::Read;
+    type E: std::error::Error;
 
     fn set_cookie(&self, cookie: &str, uri: &'static str);
 }

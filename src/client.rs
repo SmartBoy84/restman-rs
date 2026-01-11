@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::{
     ApiBackendError, ApiBackendResult, ApiHttpClient, MethodMarkerGetter,
     request::{ApiRequest, endpoints::Endpoint},
@@ -10,25 +12,6 @@ pub struct ApiClient<T: ApiHttpClient> {
     token: String, // token's not thaaat long to bother with lifetimes infesting code
 }
 
-// FUCK, you can set bounds on associated types?! This simplifies so much shit
-/*
-enforce that the method is one that implements the getter trait for our client
--> this way I can move the generic out from Endpoint and keep it independent from the client!
- */
-impl<C: ApiHttpClient> ApiClient<C> {
-    pub fn request<P>(&self, r: &ApiRequest<P>) -> ApiBackendResult<P::Res, C>
-    where
-        P: Endpoint,
-        P::Method: MethodMarkerGetter<C>, // so awesome
-    {
-        // here is the whole point of ApiClient - to hide the HttpClient from library users
-        Ok(serde_json::from_reader(
-            <P::Method as MethodMarkerGetter<C>>::request(&self.inner, r.uri(), &self.token)
-                .map_err(|e| ApiBackendError::HttpError(e))?,
-        )?)
-    }
-}
-
 impl<C: ApiHttpClient> ApiClient<C> {
     pub fn new(backend: C, token: &str) -> Self {
         Self {
@@ -36,13 +19,39 @@ impl<C: ApiHttpClient> ApiClient<C> {
             token: token.into(),
         }
     }
+}
 
-    // pub fn get_raw(&self, uri: &str) -> ApiBackendResult<String, C> {
-    //     let mut s = String::new();
-    //     self.inner
-    //         .get(uri, &self.token)
-    //         .map_err(|e| ApiBackendError::HttpError(e))?
-    //         .read_to_string(&mut s)?;
-    //     Ok(s)
-    // }
+impl<C: ApiHttpClient> ApiClient<C> {
+    // FUCK, you can set bounds on associated types?! This simplifies so much shit
+    /*
+    enforce that the method is one that implements the getter trait for our client
+    -> this way I can move the generic out from Endpoint and keep it independent from the client!
+     */
+    pub fn request<P>(&self, r: &ApiRequest<P>) -> ApiBackendResult<P::Res, C>
+    where
+        P: Endpoint,
+        P::Method: MethodMarkerGetter<C>, // so awesome
+    {
+        // here is the whole point of ApiClient - to hide the HttpClient from library users
+        Ok(serde_json::from_reader(
+            P::Method::request(&self.inner, r.uri(), &self.token)
+                .map_err(|e| ApiBackendError::HttpError(e))?,
+        )?)
+        // pretty cool - P::Method is MethodMarker - but we enforce that it is also MethodMarkerGetter
+        // so no need to do <P::Method as MethodMarkerGetter<C>>::request - just do P::Method::request directly!
+    }
+
+    /// for debugging - read into a string
+    pub fn raw_request<P>(&self, r: &ApiRequest<P>) -> ApiBackendResult<String, C>
+    where
+        P: Endpoint,
+        P::Method: MethodMarkerGetter<C>,
+    {
+        let mut s = String::new();
+        P::Method::request(&self.inner, r.uri(), &self.token)
+            .map_err(|e| ApiBackendError::HttpError(e))?
+            .read_to_string(&mut s)
+            .unwrap();
+        Ok(s)
+    }
 }
