@@ -1,9 +1,9 @@
 use serde::de::DeserializeOwned;
 
-use crate::{HttpMethod, Server, request::QueryParameters};
+use crate::{MethodMarker, Server, request::QueryParameters};
 
 pub trait Endpoint {
-    type Method: HttpMethod;
+    type Method: MethodMarker;
     type Res: DeserializeOwned;
     type Ser: Server;
 }
