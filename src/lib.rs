@@ -16,7 +16,7 @@ pub enum ApiBackendError<C: ApiHttpClient> {
 pub type ApiBackendResult<T, C> = Result<T, ApiBackendError<C>>;
 
 // hide this to not confuse user - user must then implement either ConstServer or DynamicServer to get this trait (due to blanket impls later)
-trait Server {}
+pub trait Server {}
 pub trait ConstServer {
     const ROOT: &str;
 }
