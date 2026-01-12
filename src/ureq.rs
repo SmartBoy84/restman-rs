@@ -1,5 +1,7 @@
 // backend is fully pluggable
 
+use std::{borrow::Cow, ops::Deref};
+
 use http::header::ACCEPT_LANGUAGE;
 use ureq::{
     self, BodyReader, Cookie,
@@ -12,13 +14,19 @@ use crate::{ApiHttpClient, Get, Patch, Post, Put};
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
     a: ureq::Agent,
+    auth: Cow<'static, str>, // 'static - will store const
 }
+
+const AUTH_HEADER_NAME: &str = "authorization";
 
 impl UreqApiHttpClient {
     // apprently, bad practise to enforce constructors with traits...
     pub fn new(agent: &str) -> Self {
         let a = ureq::Agent::new_with_config(Config::builder().user_agent(agent).build());
-        Self { a }
+        Self {
+            a,
+            auth: AUTH_HEADER_NAME.into(),
+        }
     }
 }
 
@@ -36,6 +44,10 @@ impl ApiHttpClient for UreqApiHttpClient {
         c.insert(cookie, &uri).unwrap();
         c.release();
     }
+
+    fn set_authorisation_header_name(&mut self, name: &str) {
+        self.auth = name.to_owned().into()
+    }
 }
 
 impl Get for UreqApiHttpClient {
@@ -44,7 +56,7 @@ impl Get for UreqApiHttpClient {
             .a
             .get(uri)
             .header(ACCEPT_LANGUAGE, "*")
-            .header(AUTHORIZATION, bearer_token)
+            .header(self.auth.deref(), bearer_token)
             .call()?
             .into_body()
             .into_reader())
@@ -57,7 +69,7 @@ impl Patch for UreqApiHttpClient {
             .a
             .patch(uri)
             .header(ACCEPT_LANGUAGE, "*")
-            .header(AUTHORIZATION, bearer_token)
+            .header(self.auth.deref(), bearer_token)
             .content_type("application/json")
             .send(&[])?
             .into_body()
@@ -71,7 +83,7 @@ impl Post for UreqApiHttpClient {
             .a
             .post(uri)
             .header(ACCEPT_LANGUAGE, "*")
-            .header(AUTHORIZATION, bearer_token)
+            .header(self.auth.deref(), bearer_token)
             .content_type("application/json")
             .send(&[])?
             .into_body()

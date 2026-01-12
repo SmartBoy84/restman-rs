@@ -15,8 +15,14 @@ pub enum ApiBackendError<C: ApiHttpClient> {
 
 pub type ApiBackendResult<T, C> = Result<T, ApiBackendError<C>>;
 
-pub trait Server {
+// hide this to not confuse user - user must then implement either ConstServer or DynamicServer to get this trait (due to blanket impls later)
+trait Server {}
+pub trait ConstServer {
     const ROOT: &str;
+}
+
+pub trait DynamicServer {
+    fn get_root(&self) -> &str;
 }
 
 pub trait ApiHttpClient {
@@ -24,6 +30,7 @@ pub trait ApiHttpClient {
     type E: std::error::Error;
 
     fn set_cookie(&self, cookie: &str, uri: &'static str);
+    fn set_authorisation_header_name(&mut self, name: &str);
 }
 
 pub trait MethodMarker {}

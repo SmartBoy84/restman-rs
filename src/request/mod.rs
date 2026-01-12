@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use endpoints::{Endpoint, EndpointWithParameters};
 use serde::Serialize;
 
-use crate::{Server, request::endpoints::EndpointWithNoPara};
+use crate::{ConstServer, DynamicServer, Server, request::endpoints::EndpointWithNoPara};
 
 pub trait QueryParameters: Serialize {
     fn add_str(&self, s: &mut String) {
@@ -30,7 +30,7 @@ pub trait SerialiseRequestPart<C: RequestConfig>: RequestPart {
 
     // Wish I could make this const but config parameters in the URL makes that impossible
     fn add_str(s: &mut String, config: &C) {
-        <<Self as SerialiseRequestPart<C>>::Next>::add_str(s, config);
+        Self::Next::add_str(s, config);
 
         // should get optimised away since WORD is const
         if Self::WORD.len() > 0 {
@@ -65,11 +65,11 @@ pub struct ApiRequest<P: Endpoint> {
 }
 
 impl<E: Endpoint> ApiRequest<E> {
-    fn new_inner<C: RequestConfig>(c: &C) -> Self
+    fn new_inner<C: RequestConfig>(c: &C, root: &str) -> Self
     where
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
-        let mut uri = <<E as Endpoint>::Ser as Server>::ROOT.to_owned();
+        let mut uri = root.to_owned();
         E::add_str(&mut uri, c);
         let uri_len = uri.len();
         Self {
@@ -80,22 +80,47 @@ impl<E: Endpoint> ApiRequest<E> {
     }
 }
 
-impl<E: Endpoint + EndpointWithNoPara> ApiRequest<E> {
+impl<E: Endpoint> ApiRequest<E>
+where
+    E::Ser: ConstServer,
+{
     pub fn new<C: RequestConfig>(c: &C) -> Self
     where
+        E: EndpointWithNoPara,
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
-        Self::new_inner(c)
+        Self::new_inner(c, E::Ser::ROOT)
     }
-}
 
-impl<E: Endpoint + EndpointWithParameters> ApiRequest<E> {
     pub fn new_with_para<C>(c: &C, p: E::P) -> Self
     where
         C: RequestConfig,
-        E: SerialiseRequestPart<C>,
+        E: EndpointWithParameters + SerialiseRequestPart<C>,
     {
-        let mut s = Self::new_inner(c);
+        let mut s = Self::new_inner(c, E::Ser::ROOT);
+        p.add_str(s.uri_mut());
+        s
+    }
+}
+
+impl<E: Endpoint> ApiRequest<E>
+where
+    E::Ser: DynamicServer,
+{
+    pub fn new_with_server<C: RequestConfig>(c: &C, s: &E::Ser) -> Self
+    where
+        E: EndpointWithNoPara,
+        E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
+    {
+        Self::new_inner(c, s.get_root())
+    }
+
+    pub fn new_with_para_server<C>(c: &C, p: E::P, s: &E::Ser) -> Self
+    where
+        C: RequestConfig,
+        E: EndpointWithParameters + SerialiseRequestPart<C>,
+    {
+        let mut s = Self::new_inner(c, s.get_root());
         p.add_str(s.uri_mut());
         s
     }
