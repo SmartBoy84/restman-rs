@@ -42,7 +42,7 @@ pub trait MethodMarkerGetter<C: ApiHttpClient> {
 macro_rules! method {
     ($name:ident, $trait:ident, $getter:ident) => {
         // create the method trait for http clients to implement
-        trait $trait: ApiHttpClient {
+        pub trait $trait: ApiHttpClient {
             fn $getter(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E>;
         }
 

@@ -59,8 +59,6 @@ The terminating part of a URL is the `Endpoint`, and must be defined separately
 using the `endpoint!` macro.\
 `endpoint!(<target server>, pub <endpoint name>, <serialised name>, <previous part>, <response>, <parameters>,  method = <GET | POST | PATCH | PUT>);`
 
-> GET is the default, when the method is not specified
-
 To implement the `employee` endpoint above,
 
 ```rust
@@ -85,7 +83,7 @@ struct EmployeePara {
 }
 
 // assume it requires a PATCH request
-endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara, method = restman_rs::PATCH);
+endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara, restman_rs::PATCH);
 ```
 
 > See how at this point, only `Company` was needed and no other part of the

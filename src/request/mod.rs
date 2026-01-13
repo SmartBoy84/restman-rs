@@ -3,15 +3,17 @@ mod parts;
 
 use std::marker::PhantomData;
 
-use endpoints::{Endpoint, EndpointWithParameters};
+use endpoints::Endpoint;
 use serde::Serialize;
 
-use crate::{ConstServer, DynamicServer, Server, request::endpoints::EndpointWithNoPara};
+use crate::{ConstServer, DynamicServer};
+
+pub trait QueryParametersInner {}
 
 pub trait QueryParameters: Serialize {
     fn add_str(&self, s: &mut String) {
+        s.push('?');
         unsafe {
-            s.push('?');
             // WOWZERS! Alright, serde_url_params can't ever fail because I vet my structs before using the unchecked unwrap
             // In addition, Serde will always yield utf8 so I can write directly to the string's underlying buffer
             serde_url_params::to_writer(s.as_mut_vec(), self).unwrap();
@@ -19,6 +21,8 @@ pub trait QueryParameters: Serialize {
         }
     }
 }
+
+impl<T: QueryParameters> QueryParametersInner for T {}
 
 pub trait SerialiseRequestPart<C: RequestConfig>: RequestPart {
     const WORD: &str;
@@ -86,16 +90,17 @@ where
 {
     pub fn new<C: RequestConfig>(c: &C) -> Self
     where
-        E: EndpointWithNoPara,
+        E: Endpoint<Para = ()>,
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
         Self::new_inner(c, E::Ser::ROOT)
     }
 
-    pub fn new_with_para<C>(c: &C, p: E::P) -> Self
+    pub fn new_with_para<C>(c: &C, p: E::Para) -> Self
     where
         C: RequestConfig,
-        E: EndpointWithParameters + SerialiseRequestPart<C>,
+        E: SerialiseRequestPart<C>,
+        <E as Endpoint>::Para: QueryParameters,
     {
         let mut s = Self::new_inner(c, E::Ser::ROOT);
         p.add_str(s.uri_mut());
@@ -109,16 +114,17 @@ where
 {
     pub fn new_with_server<C: RequestConfig>(c: &C, s: &E::Ser) -> Self
     where
-        E: EndpointWithNoPara,
+        E: Endpoint<Para = ()>,
         E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
     {
         Self::new_inner(c, s.get_root())
     }
 
-    pub fn new_with_para_server<C>(c: &C, p: E::P, s: &E::Ser) -> Self
+    pub fn new_with_para_server<C>(c: &C, p: E::Para, s: &E::Ser) -> Self
     where
         C: RequestConfig,
-        E: EndpointWithParameters + SerialiseRequestPart<C>,
+        E: SerialiseRequestPart<C>,
+        <E as Endpoint>::Para: QueryParameters,
     {
         let mut s = Self::new_inner(c, s.get_root());
         p.add_str(s.uri_mut());
@@ -126,10 +132,10 @@ where
     }
 }
 
-impl<T: Endpoint> ApiRequest<T> {
-    pub fn change_para(&mut self, p: T::P)
+impl<E: Endpoint> ApiRequest<E> {
+    pub fn change_para(&mut self, p: E::Para)
     where
-        T: EndpointWithParameters,
+        <E as Endpoint>::Para: QueryParameters,
     {
         self.uri.truncate(self.uri_len);
         p.add_str(&mut self.uri);
