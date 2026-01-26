@@ -1,6 +1,6 @@
 use serde::de::DeserializeOwned;
 
-use crate::{MethodMarker, Server, request::QueryParametersInner};
+use crate::{MethodMarker, Server, request::{QueryParametersInner, QueryParametersOptional}};
 
 pub trait Endpoint {
     type Method: MethodMarker;
@@ -10,11 +10,7 @@ pub trait Endpoint {
 }
 
 impl QueryParametersInner for () {}
-
-#[macro_export]
-macro_rules! endpoint_common {
-    ($server:ty, $vis:vis $name:ident, $word:literal, $default:ty, $res:ty, $method:ty) => {};
-}
+impl QueryParametersOptional for () {}
 
 // note to self; #[macro_export] exposes them at the ROOT level of the crate, that's why I do $crate::endpoint_common
 

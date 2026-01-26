@@ -5,9 +5,7 @@ Library helper utilities for creating Rust bindings around a REST API.
 # Implementing
 
 For example, consider implementing the API path
-`/v1/company/{company_id}/employee?id=123`.
-
-> In the following, argument(s) wrapped in [] are optional
+`/v1/company/{company_id}/employee?id=123` where the argument string `id=123` is *optional*.
 
 ## `RequestPart`
 
@@ -15,6 +13,7 @@ Everything prior to `position` is a `RequestPart` and must be defined using the
 `request_part!` macro.
 
 `request_part!(<struct name>, <serialised name>, <next part>, [<config trait>, <config getter>])`
+> Argument(s) wrapped in [] are optional
 
 To implement `v1`,
 
@@ -81,6 +80,9 @@ struct EmployeePara {
     id: String,
     employment: Option<String> // will be omitted from URI if None
 }
+
+// since the parameters are optional, we'll indicate that - now specification won't be enforced at compile time!
+impl restman_rs::request::QueryParametersOptional for EmployeePara {}
 
 // assume it requires a PATCH request
 endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara, restman_rs::PATCH);

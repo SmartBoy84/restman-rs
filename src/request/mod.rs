@@ -10,6 +10,8 @@ use crate::{ConstServer, DynamicServer};
 
 pub trait QueryParametersInner {}
 
+pub trait QueryParametersOptional: QueryParametersInner {}
+
 pub trait QueryParameters: Serialize {
     fn add_str(&self, s: &mut String) {
         s.push('?');
@@ -23,6 +25,12 @@ pub trait QueryParameters: Serialize {
 }
 
 impl<T: QueryParameters> QueryParametersInner for T {}
+
+pub trait RequestPart {
+    /*
+    marker trait to not have to add the config generic parameter in the struct
+     */
+}
 
 pub trait SerialiseRequestPart<C: RequestConfig>: RequestPart {
     const WORD: &str;
@@ -50,19 +58,42 @@ pub trait SerialiseRequestPart<C: RequestConfig>: RequestPart {
     }
 }
 
-pub trait RequestPart {
-    /*
-    Marker trait prevents creation of RequestParts with invalid inner types
-    */
-}
-
 pub trait RequestConfig {}
 
 impl RequestConfig for () {}
 
+// ensure correct request (with para or not) - page out of the MethodGetter trick in client.rs request() function
+// it works... but the errors are bound to be difficult to interpret
+pub trait ValidRequest<E: Endpoint> {
+    fn uri(&self) -> &str;
+}
+
+// ApiRequest (no para specified) only valid if optional
+impl<E> ValidRequest<E> for ApiRequest<E>
+where
+    E: Endpoint,
+    E::Para: QueryParametersOptional,
+{
+    fn uri(&self) -> &str {
+        &self.uri
+    }
+}
+
+// you can only get ApiRequestWithPara by specifying parameters via ApiRequest
+impl<E: Endpoint> ValidRequest<E> for ApiRequestWithPara<E> {
+    fn uri(&self) -> &str {
+        &self.uri
+    }
+}
+
 #[derive(Default)]
 // use the more general Endpoint here to avoid leaking implementation detail `Config`
 pub struct ApiRequest<P: Endpoint> {
+    uri: String,
+    inner: PhantomData<P>,
+}
+
+pub struct ApiRequestWithPara<P: Endpoint> {
     uri: String,
     uri_len: usize,
     inner: PhantomData<P>,
@@ -71,81 +102,62 @@ pub struct ApiRequest<P: Endpoint> {
 impl<E: Endpoint> ApiRequest<E> {
     fn new_inner<C: RequestConfig>(c: &C, root: &str) -> Self
     where
-        E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
+        E: SerialiseRequestPart<C>,
     {
         let mut uri = root.to_owned();
         E::add_str(&mut uri, c);
+        Self {
+            uri,
+            inner: PhantomData,
+        }
+    }
+}
+
+impl<E: Endpoint> ApiRequest<E> {
+    pub fn new<C: RequestConfig>(c: &C) -> Self
+    where
+        E::Ser: ConstServer,
+        E: SerialiseRequestPart<C>,
+    {
+        Self::new_inner(c, E::Ser::ROOT)
+    }
+
+    pub fn new_with_server<C: RequestConfig>(c: &C, server: &E::Ser) -> Self
+    where
+        E::Ser: DynamicServer,
+        E: SerialiseRequestPart<C>,
+    {
+        Self::new_inner(c, server.get_root())
+    }
+
+    // pretty cool - if optional then user doesn't *have* to call this method
+    // but if optional trait not implemented, there's no way to call request() on the client without having called this
+    pub fn add_para(self, p: &E::Para) -> ApiRequestWithPara<E>
+    where
+        E::Para: QueryParameters,
+    {
+        ApiRequestWithPara::new(self, p)
+    }
+}
+
+// pretty cool
+impl<E: Endpoint> ApiRequestWithPara<E>
+where
+    E::Para: QueryParameters,
+{
+    fn new(r: ApiRequest<E>, p: &E::Para) -> Self {
+        let mut uri = r.uri;
         let uri_len = uri.len();
+        p.add_str(&mut uri);
         Self {
             uri,
             uri_len,
             inner: PhantomData,
         }
     }
-}
 
-impl<E: Endpoint> ApiRequest<E>
-where
-    E::Ser: ConstServer,
-{
-    pub fn new<C: RequestConfig>(c: &C) -> Self
-    where
-        E: Endpoint<Para = ()>,
-        E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
-    {
-        Self::new_inner(c, E::Ser::ROOT)
-    }
-
-    pub fn new_with_para<C>(c: &C, p: E::Para) -> Self
-    where
-        C: RequestConfig,
-        E: SerialiseRequestPart<C>,
-        <E as Endpoint>::Para: QueryParameters,
-    {
-        let mut s = Self::new_inner(c, E::Ser::ROOT);
-        p.add_str(s.uri_mut());
-        s
-    }
-}
-
-impl<E: Endpoint> ApiRequest<E>
-where
-    E::Ser: DynamicServer,
-{
-    pub fn new_with_server<C: RequestConfig>(c: &C, s: &E::Ser) -> Self
-    where
-        E: Endpoint<Para = ()>,
-        E: SerialiseRequestPart<C>, // guaranteed, since I do SerialiseEndpoint: Endpoint
-    {
-        Self::new_inner(c, s.get_root())
-    }
-
-    pub fn new_with_para_server<C>(c: &C, p: E::Para, s: &E::Ser) -> Self
-    where
-        C: RequestConfig,
-        E: SerialiseRequestPart<C>,
-        <E as Endpoint>::Para: QueryParameters,
-    {
-        let mut s = Self::new_inner(c, s.get_root());
-        p.add_str(s.uri_mut());
-        s
-    }
-}
-
-impl<E: Endpoint> ApiRequest<E> {
-    pub fn change_para(&mut self, p: E::Para)
-    where
-        <E as Endpoint>::Para: QueryParameters,
-    {
+    pub fn change_para(&mut self, p: E::Para) {
         self.uri.truncate(self.uri_len);
         p.add_str(&mut self.uri);
-    }
-
-    fn uri_mut(&mut self) -> &mut String {
-        &mut self.uri
-    }
-
-    pub fn uri(&self) -> &str {
-        &self.uri
     }
 }

@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::{
     ApiBackendError, ApiBackendResult, ApiHttpClient, MethodMarkerGetter,
-    request::{ApiRequest, endpoints::Endpoint},
+    request::{ValidRequest, endpoints::Endpoint},
 };
 
 pub const AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0";
@@ -27,9 +27,8 @@ impl<C: ApiHttpClient> ApiClient<C> {
     enforce that the method is one that implements the getter trait for our client
     -> this way I can move the generic out from Endpoint and keep it independent from the client!
      */
-    pub fn request<P>(&self, r: &ApiRequest<P>) -> ApiBackendResult<P::Res, C>
+    pub fn request<P: Endpoint, R: ValidRequest<P>>(&self, r: &R) -> ApiBackendResult<P::Res, C>
     where
-        P: Endpoint,
         P::Method: MethodMarkerGetter<C>, // so awesome
     {
         // here is the whole point of ApiClient - to hide the HttpClient from library users
@@ -42,9 +41,8 @@ impl<C: ApiHttpClient> ApiClient<C> {
     }
 
     /// for debugging - read into a string
-    pub fn raw_request<P>(&self, r: &ApiRequest<P>) -> ApiBackendResult<String, C>
+    pub fn raw_request<P: Endpoint, R: ValidRequest<P>>(&self, r: &R) -> ApiBackendResult<String, C>
     where
-        P: Endpoint,
         P::Method: MethodMarkerGetter<C>,
     {
         let mut s = String::new();
