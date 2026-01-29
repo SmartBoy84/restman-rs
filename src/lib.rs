@@ -34,8 +34,8 @@ pub trait ApiHttpClient {
 }
 
 pub trait MethodMarker {}
-pub trait MethodMarkerGetter<C: ApiHttpClient> {
-    fn request(c: &C, uri: &str, bearer_token: &str) -> Result<C::R, C::E>;
+pub trait MethodMarkerGetter<C: ApiHttpClient>: MethodMarker {
+    fn request(c: &C, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<C::R, C::E>;
 }
 
 #[macro_export]
@@ -43,15 +43,20 @@ macro_rules! method {
     ($name:ident, $trait:ident, $getter:ident) => {
         // create the method trait for http clients to implement
         pub trait $trait: ApiHttpClient {
-            fn $getter(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E>;
+            fn $getter(
+                &self,
+                uri: &str,
+                bearer_token: &str,
+                payload: &[u8],
+            ) -> Result<Self::R, Self::E>;
         }
 
         // create a method marker struct to set in endpoints
         pub struct $name;
         impl MethodMarker for $name {}
         impl<C: $trait> MethodMarkerGetter<C> for $name {
-            fn request(c: &C, uri: &str, bearer_token: &str) -> Result<C::R, C::E> {
-                c.$getter(uri, bearer_token)
+            fn request(c: &C, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<C::R, C::E> {
+                c.$getter(uri, bearer_token, payload)
             }
         }
     };

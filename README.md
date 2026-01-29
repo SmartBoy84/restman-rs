@@ -5,7 +5,8 @@ Library helper utilities for creating Rust bindings around a REST API.
 # Implementing
 
 For example, consider implementing the API path
-`/v1/company/{company_id}/employee?id=123` where the argument string `id=123` is *optional*.
+`/v1/company/{company_id}/employee?id=123` where the argument string `id=123` is
+_optional_, and it takes a JSON payload via POST request.
 
 ## `RequestPart`
 
@@ -13,6 +14,7 @@ Everything prior to `position` is a `RequestPart` and must be defined using the
 `request_part!` macro.
 
 `request_part!(<struct name>, <serialised name>, <next part>, [<config trait>, <config getter>])`
+
 > Argument(s) wrapped in [] are optional
 
 To implement `v1`,
@@ -56,15 +58,29 @@ request_part!(Company, "company", V1, HasCompanyID, company_id);
 
 The terminating part of a URL is the `Endpoint`, and must be defined separately
 using the `endpoint!` macro.\
-`endpoint!(<target server>, pub <endpoint name>, <serialised name>, <previous part>, <response>, <parameters>,  method = <GET | POST | PATCH | PUT>);`
+`endpoint!(<target server>, pub <endpoint name>, <serialised name>, <previous part>, <response>, <parameters>, <json payload>, method = <GET | POST | PATCH | PUT>);`
 
-To implement the `employee` endpoint above,
+> Note; `json payload` argument can be make `()` if not required - this will
+> alter what method user calls so that they themself don't have to pass `&[]` To
+> implement the `employee` endpoint above,
 
 ```rust
 // first must define the target server marker struct
-pub struct MyServer;
-impl restman_rs::Server for MyServer {
+pub struct MyServer {
+    pub server: String
+};
+impl restman_rs::Server for MyServer {}
+
+// provide a default backend URL
+impl restman_rs::ConstServer {
     const ROOT: &str = "https://api.myserver.com/api"; // no trailing slash!
+}
+
+// if you want to permit users to also be able to specify their own backend (i.e., to be able to call ApiRequest::<T>::new_with_server(...))
+impl restman_rs::DynamicServer {
+    fn get_root(&self) -> &str {
+        &self.server
+    }
 }
 
 // then it's response struct
@@ -81,11 +97,17 @@ struct EmployeePara {
     employment: Option<String> // will be omitted from URI if None
 }
 
+// it takes a JSON payload as well (illustrative example - obviously not real world)
+#[derive(serde::Serialize)]
+struct EmployeePayload {
+    greet: String // idk, greet them?
+}
+
 // since the parameters are optional, we'll indicate that - now specification won't be enforced at compile time!
 impl restman_rs::request::QueryParametersOptional for EmployeePara {}
 
 // assume it requires a PATCH request
-endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara, restman_rs::PATCH);
+endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara, EmployeePayload, restman_rs::POST);
 ```
 
 > See how at this point, only `Company` was needed and no other part of the
@@ -94,29 +116,66 @@ endpoint!(MyServer, pub Employee, "employee", Company, EmployeeRes, EmployeePara
 
 ## `ApiClient`
 
-Finally, you are ready to make a request!
+To get access to the request methods, implement the `ApiClient<C: Server>` and
+`ApiClientBackend<C: ApiHttpClient>`.
+
+> Note, traits split to allow user to support multiple `Server`s
+
+```rust
+struct MyApiClient<C: ApiHttpClient> {
+    token: String,
+    backend: C
+}
+
+impl<C: ApiHttpClient> ApiClientBackend<C> for WorkjamUser<C> {
+    fn token(&self) -> &str {
+        &self.token
+    }
+    fn backend(&self) -> &C {
+        &self.backend
+    }
+}
+
+impl<C: ApiHttpClient> ApiClient<MyServer> for WorkjamUser<C> {}
+// impl<C: ApiHttpClient> ApiClient<MyServer1> for MyApiClient<C> {}
+// ...
+// impl<C: ApiHttpClient> ApiClient<MyServerN> for MyApiClient<C> {}
+```
+
+## Making requests
+
+Finally, we are ready to make requests!
 
 ```rust
 const TOKEN: &str = "my_token";
 
-let backened = restman_rs::UreqApiHttpClient::new(restman_rs::client::AGENT); // can use your own!
-let client = restman_rs::ApiClient::new(backend, TOKEN);
+let backend = restman_rs::UreqApiHttpClient::new(restman_rs::client::AGENT);
+
+let my_client = MyApiClient {
+    token: TOKEN.to_string();
+    backend: 
+};
 
 let config = MyConfig { company_id: "my-company" }
 let para = EmployeePara {id: "my-id", employment: None };
+let payload = EmployeePayload {greeting: "hey worker!".to_string()};
 let req = restman_rs::ApiRequest::<Employee>::new_with_para(&config, para);
 
-let res: EmployeeRes = client.request(&req).unwrap();
+let res: EmployeeRes = client.request(&req, &payload).unwrap();
 ```
 
 > You can plug in your own backend, as long as it implements the
 > restman_rs::client::ApiHttpClient trait
 
 ## Custom HTTP backend
-The bare minimum is to implement `restman_rs::ApiHttpClient`, then depending on which request types required `restman_rs::{GET, PATCH, PUT, POST}`.  
+
+The bare minimum is to implement `restman_rs::ApiHttpClient`, then depending on
+which request types required `restman_rs::{GET, PATCH, PUT, POST}`.
 
 # Why do it this way?
+
 Consider the naive approach:
+
 ```rust
 impl MyClient {
     fn employee_req(&self, company_id: &str, para: EmployeePara) -> EmployeeRes {
@@ -125,11 +184,20 @@ impl MyClient {
     }
 }
 ```
-This quickly becomes untenable when you have a large number of endpoint, and many parts to the URL. If the API changes at any point, you have to traverse through every single endpoint and change the path everytime.  
 
-For example, suppose the `company` part of the example URI now resides at `/v1/location/{location id}/city/{city id}/company/{company id}`, you have to change the arguments of each method (there may tens or hundreds!), and change the `format!` method!  
+This quickly becomes untenable when you have a large number of endpoint, and
+many parts to the URL. If the API changes at any point, you have to traverse
+through every single endpoint and change the path everytime.
 
-This is illogical though, the `employee` endpoint really only needs to know the detail that it's preceeding part is `company` - everything else should be inherited implicitly. This is what my crate solves, among other things that becomes obvious with use.  
+For example, suppose the `company` part of the example URI now resides at
+`/v1/location/{location id}/city/{city id}/company/{company id}`, you have to
+change the arguments of each method (there may tens or hundreds!), and change
+the `format!` method!
+
+This is illogical though, the `employee` endpoint really only needs to know the
+detail that it's preceeding part is `company` - everything else should be
+inherited implicitly. This is what my crate solves, among other things that
+becomes obvious with use.
 
 # Example
 

@@ -51,7 +51,7 @@ impl ApiHttpClient for UreqApiHttpClient {
 }
 
 impl Get for UreqApiHttpClient {
-    fn get(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
+    fn get(&self, uri: &str, bearer_token: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .get(uri)
@@ -64,42 +64,42 @@ impl Get for UreqApiHttpClient {
 }
 
 impl Patch for UreqApiHttpClient {
-    fn patch(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
+    fn patch(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .patch(uri)
             .header(ACCEPT_LANGUAGE, "*")
             .header(self.auth.deref(), bearer_token)
             .content_type("application/json")
-            .send(&[])?
+            .send(payload)?
             .into_body()
             .into_reader())
     }
 }
 
 impl Post for UreqApiHttpClient {
-    fn post(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
+    fn post(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .post(uri)
             .header(ACCEPT_LANGUAGE, "*")
             .header(self.auth.deref(), bearer_token)
             .content_type("application/json")
-            .send(&[])?
+            .send(payload)?
             .into_body()
             .into_reader())
     }
 }
 
 impl Put for UreqApiHttpClient {
-    fn put(&self, uri: &str, bearer_token: &str) -> Result<Self::R, Self::E> {
+    fn put(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
         Ok(self
             .a
             .put(uri)
             .header(ACCEPT_LANGUAGE, "*")
             .header(AUTHORIZATION, bearer_token)
             .content_type("application/json")
-            .send(&[])?
+            .send(payload)?
             .into_body()
             .into_reader())
     }

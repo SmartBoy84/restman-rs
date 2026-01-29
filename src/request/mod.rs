@@ -8,6 +8,10 @@ use serde::Serialize;
 
 use crate::{ConstServer, DynamicServer};
 
+pub trait QueryPayloadInner {}
+pub trait QueryPayload: Serialize {}
+impl<T: QueryParameters> QueryPayloadInner for T {} // blanket impl so that users don't have to implement the inner trait (needed for ())
+
 pub trait QueryParametersInner {}
 
 pub trait QueryParametersOptional: QueryParametersInner {}
@@ -79,20 +83,21 @@ where
     }
 }
 
-// you can only get ApiRequestWithPara by specifying parameters via ApiRequest
+// you can only get ApiRequestWithPara by specifying parameters via ApiRequest, so all types valid
 impl<E: Endpoint> ValidRequest<E> for ApiRequestWithPara<E> {
     fn uri(&self) -> &str {
         &self.uri
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 // use the more general Endpoint here to avoid leaking implementation detail `Config`
 pub struct ApiRequest<P: Endpoint> {
     uri: String,
     inner: PhantomData<P>,
 }
 
+#[derive(Debug)]
 pub struct ApiRequestWithPara<P: Endpoint> {
     uri: String,
     uri_len: usize,
