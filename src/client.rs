@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::{
     ApiBackendError, ApiBackendResult, ApiHttpClient, MethodMarkerGetter, Server,
     request::{QueryPayload, ValidRequest, endpoints::Endpoint},
@@ -16,6 +18,42 @@ pub trait ApiClientBackend<C: ApiHttpClient> {
 pub trait ApiClientBackendInner<C: ApiHttpClient, S: Server>:
     ApiClient<S> + ApiClientBackend<C>
 {
+    fn request<P: Endpoint<Payload = (), Ser = S>, R: ValidRequest<P>>(
+        &self,
+        r: &R,
+    ) -> ApiBackendResult<P::Res, C>
+    where
+        P::Method: MethodMarkerGetter<C>, // so awesome
+    {
+        self.inner_request(r, &[])
+    }
+
+    fn send_payload<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
+        &self,
+        r: &R,
+        p: &P::Payload,
+    ) -> ApiBackendResult<P::Res, C>
+    where
+        P::Method: MethodMarkerGetter<C>, // so awesome
+        P::Payload: QueryPayload,
+    {
+        self.inner_request(r, serde_json::to_string(p)?.as_bytes())
+    }
+
+    fn raw_request<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
+        &self,
+        r: &R,
+        p: &[u8],
+    ) -> ApiBackendResult<String, C>
+    where
+        P::Method: MethodMarkerGetter<C>, // so awesome
+    {
+        let mut s = String::new();
+        self.inner_raw_request(r, p)?
+            .read_to_string(&mut s)
+            .expect("bad string return");
+        Ok(s)
+    }
 }
 // access only permitted, if both specified!
 impl<C: ApiHttpClient, S: Server, T: ApiClient<S> + ApiClientBackend<C>> ApiClientBackendInner<C, S>
@@ -23,6 +61,7 @@ impl<C: ApiHttpClient, S: Server, T: ApiClient<S> + ApiClientBackend<C>> ApiClie
 {
 }
 
+// seal this trait - external users shouldn't be able to see it
 trait InnerGetter<C: ApiHttpClient, S: Server>: ApiClientBackendInner<C, S> {
     // FUCK, you can set bounds on associated types?! This simplifies so much shit
     /*
@@ -55,31 +94,3 @@ trait InnerGetter<C: ApiHttpClient, S: Server>: ApiClientBackendInner<C, S> {
     }
 }
 impl<C: ApiHttpClient, S: Server, T: ApiClientBackendInner<C, S> + ?Sized> InnerGetter<C, S> for T {}
-
-pub trait NoPayloadGetter<C: ApiHttpClient, S: Server>: ApiClientBackendInner<C, S> {
-    fn request<P: Endpoint<Payload = (), Ser = S>, R: ValidRequest<P>>(
-        &self,
-        r: &R,
-    ) -> ApiBackendResult<P::Res, C>
-    where
-        P::Method: MethodMarkerGetter<C>, // so awesome
-    {
-        self.inner_request(r, &[])
-    }
-}
-impl<C: ApiHttpClient, S: Server, T: ApiClientBackendInner<C, S>> NoPayloadGetter<C, S> for T {}
-
-pub trait PayloadGetter<C: ApiHttpClient, S: Server>: ApiClientBackendInner<C, S> {
-    fn request<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
-        &self,
-        r: &R,
-        p: &P::Payload,
-    ) -> ApiBackendResult<P::Res, C>
-    where
-        P::Method: MethodMarkerGetter<C>, // so awesome
-        P::Payload: QueryPayload,
-    {
-        self.inner_request(r, serde_json::to_string(p)?.as_bytes())
-    }
-}
-impl<C: ApiHttpClient, S: Server, T: ApiClientBackendInner<C, S>> PayloadGetter<C, S> for T {}
