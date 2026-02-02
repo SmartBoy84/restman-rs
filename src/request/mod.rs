@@ -10,7 +10,7 @@ use crate::{ConstServer, DynamicServer};
 
 pub trait QueryPayloadInner {}
 pub trait QueryPayload: Serialize {}
-impl<T: QueryParameters> QueryPayloadInner for T {} // blanket impl so that users don't have to implement the inner trait (needed for ())
+impl<T: QueryPayload> QueryPayloadInner for T {} // blanket impl so that users don't have to implement the inner trait (needed for ())
 
 pub trait QueryParametersInner {}
 
@@ -66,27 +66,23 @@ pub trait RequestConfig {}
 
 impl RequestConfig for () {}
 
-// ensure correct request (with para or not) - page out of the MethodGetter trick in client.rs request() function
-// it works... but the errors are bound to be difficult to interpret
-pub trait ValidRequest<E: Endpoint> {
-    fn uri(&self) -> &str;
+// serialisation is expensive, and user may want to use same payload multiple times
+pub struct ApiPayload<Q: QueryPayload> {
+    data: String,
+    _payload: PhantomData<Q>,
 }
 
-// ApiRequest (no para specified) only valid if optional
-impl<E> ValidRequest<E> for ApiRequest<E>
-where
-    E: Endpoint,
-    E::Para: QueryParametersOptional,
-{
-    fn uri(&self) -> &str {
-        &self.uri
+// QueryPayload, ApiPayload - runnin' outta names here man ;(
+impl<Q: QueryPayload> ApiPayload<Q> {
+    pub fn new(value: Q) -> serde_json::Result<Self> {
+        let data = serde_json::to_string(&value)?;
+        Ok(Self {
+            data,
+            _payload: PhantomData,
+        })
     }
-}
-
-// you can only get ApiRequestWithPara by specifying parameters via ApiRequest, so all types valid
-impl<E: Endpoint> ValidRequest<E> for ApiRequestWithPara<E> {
-    fn uri(&self) -> &str {
-        &self.uri
+    pub fn payload(&self) -> &str {
+        &self.data
     }
 }
 
@@ -115,6 +111,30 @@ impl<E: Endpoint> ApiRequest<E> {
             uri,
             inner: PhantomData,
         }
+    }
+}
+
+// ensure correct request (with para or not) - page out of the MethodGetter trick in client.rs request() function
+// it works... but the errors are bound to be difficult to interpret
+pub trait ValidRequest<E: Endpoint> {
+    fn uri(&self) -> &str;
+}
+
+// ApiRequest (no para specified) only valid if optional
+impl<E> ValidRequest<E> for ApiRequest<E>
+where
+    E: Endpoint,
+    E::Para: QueryParametersOptional,
+{
+    fn uri(&self) -> &str {
+        &self.uri
+    }
+}
+
+// you can only get ApiRequestWithPara by specifying parameters via ApiRequest, so all types valid
+impl<E: Endpoint> ValidRequest<E> for ApiRequestWithPara<E> {
+    fn uri(&self) -> &str {
+        &self.uri
     }
 }
 

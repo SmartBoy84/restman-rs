@@ -10,7 +10,7 @@ _optional_, and it takes a JSON payload via POST request.
 
 ## `RequestPart`
 
-Everything prior to `position` is a `RequestPart` and must be defined using the
+Everything prior to `employee` is a `RequestPart` and must be defined using the
 `request_part!` macro.
 
 `request_part!(<struct name>, <serialised name>, <next part>, [<config trait>, <config getter>])`
@@ -61,8 +61,9 @@ using the `endpoint!` macro.\
 `endpoint!(<target server>, pub <endpoint name>, <serialised name>, <previous part>, <response>, <parameters>, <json payload>, method = <GET | POST | PATCH | PUT>);`
 
 > Note; `json payload` argument can be make `()` if not required - this will
-> alter what method user calls so that they themself don't have to pass `&[]` To
-> implement the `employee` endpoint above,
+> alter what method user can call so that they themself don't have to pass `&[]`
+
+To implement the `employee` endpoint above,
 
 ```rust
 // first must define the target server marker struct
@@ -72,12 +73,12 @@ pub struct MyServer {
 impl restman_rs::Server for MyServer {}
 
 // provide a default backend URL
-impl restman_rs::ConstServer {
+impl restman_rs::ConstServer for MyServer {
     const ROOT: &str = "https://api.myserver.com/api"; // no trailing slash!
 }
 
 // if you want to permit users to also be able to specify their own backend (i.e., to be able to call ApiRequest::<T>::new_with_server(...))
-impl restman_rs::DynamicServer {
+impl restman_rs::DynamicServer for MyServer {
     fn get_root(&self) -> &str {
         &self.server
     }
@@ -158,10 +159,11 @@ let my_client = MyApiClient {
 
 let config = MyConfig { company_id: "my-company" }
 let para = EmployeePara {id: "my-id", employment: None };
-let payload = EmployeePayload {greeting: "hey worker!".to_string()};
+let payload = restman_rs::ApiPayload::new(&EmployeePayload {greeting: "hey worker!".to_string()});
 let req = restman_rs::ApiRequest::<Employee>::new_with_para(&config, para);
 
-let res: EmployeeRes = client.request(&req, &payload).unwrap();
+let res: EmployeeRes = client.send_payload(&req, &payload).unwrap();
+// let res: EmployeeRes = client.request(&req).unwrap(); // for when no payload required - will result in an error, if not the case
 ```
 
 > You can plug in your own backend, as long as it implements the
@@ -199,7 +201,8 @@ detail that it's preceeding part is `company` - everything else should be
 inherited implicitly. This is what my crate solves, among other things that
 becomes obvious with use.
 
-# Example
+# Examples
 
-For an indepth, real-world example, refer to
-[workjam-rs](https://github.com/SmartBoy84/workjam-rs)
+For indepth, real-world example, refer to
+[workjam-rs](https://github.com/SmartBoy84/workjam-rs) and [bravia-rs](https://github.com/SmartBoy84/bravia-rs).  
+

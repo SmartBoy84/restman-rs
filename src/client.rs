@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::{
     ApiBackendError, ApiBackendResult, ApiHttpClient, MethodMarkerGetter, Server,
-    request::{QueryPayload, ValidRequest, endpoints::Endpoint},
+    request::{ApiPayload, QueryPayload, ValidRequest, endpoints::Endpoint},
 };
 
 pub const AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0";
@@ -15,9 +15,7 @@ pub trait ApiClientBackend<C: ApiHttpClient> {
     fn backend(&self) -> &C;
 }
 
-pub trait ApiClient<C: ApiHttpClient, S: Server>:
-    ApiClientServer<S> + ApiClientBackend<C>
-{
+pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClientBackend<C> {
     fn request<P: Endpoint<Payload = (), Ser = S>, R: ValidRequest<P>>(
         &self,
         r: &R,
@@ -31,13 +29,13 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>:
     fn send_payload<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
         &self,
         r: &R,
-        p: &P::Payload,
+        p: &ApiPayload<P::Payload>,
     ) -> ApiBackendResult<P::Res, C>
     where
         P::Method: MethodMarkerGetter<C>, // so awesome
         P::Payload: QueryPayload,
     {
-        self.inner_request(r, serde_json::to_string(p)?.as_bytes())
+        self.inner_request(r, p.payload().as_bytes())
     }
 
     fn raw_request<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
