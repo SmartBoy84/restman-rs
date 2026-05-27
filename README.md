@@ -124,24 +124,32 @@ To get access to the request methods, implement the `ApiClient<C: Server>` and
 
 ```rust
 struct MyApiClient<C: ApiHttpClient> {
-    token: String,
     backend: C
 }
 
-impl<C: ApiHttpClient> ApiClientBackend<C> for WorkjamUser<C> {
-    fn token(&self) -> &str {
-        &self.token
+// Configuring the backend is the library creator's job as all API backends are different
+impl<C: ApiHttpClient> MyApiClient<C> {
+    fn new(bearer_token: &str) {
+        let backend = MyBackend::new();
+
+        backend.set_header(BEARER_TOKEN_HEADER_NAME, bearer_token); // I provide the bearer token header name (default authentication mechanism for most API backends)
     }
+}
+
+impl<C: ApiHttpClient> ApiClientBackend<C> for WorkjamUser<C> {
+    // return the *configured* backend
     fn backend(&self) -> &C {
         &self.backend
     }
 }
 
-impl<C: ApiHttpClient> ApiClient<MyServer> for WorkjamUser<C> {}
-// impl<C: ApiHttpClient> ApiClient<MyServer1> for MyApiClient<C> {}
+impl<C: ApiHttpClient> ApiClientServer<MyServer> for WorkjamUser<C> {}
+// impl<C: ApiHttpClient> ApiClientServer<MyServer1> for MyApiClient<C> {}
 // ...
-// impl<C: ApiHttpClient> ApiClient<MyServerN> for MyApiClient<C> {}
+// impl<C: ApiHttpClient> ApiClientServer<MyServerN> for MyApiClient<C> {}
 ```
+
+It is the **user's** responsibility to correctly configure the backend (i.e., set all the authorisation headers etc). This library is designed so that each `backend` instance represents a session - I have intentionally not allowed one backend to be used with different tokens.  
 
 ## Making requests
 
@@ -204,5 +212,5 @@ becomes obvious with use.
 # Examples
 
 For indepth, real-world example, refer to
-[workjam-rs](https://github.com/SmartBoy84/workjam-rs) and [bravia-rs](https://github.com/SmartBoy84/bravia-rs).  
-
+[workjam-rs](https://github.com/SmartBoy84/workjam-rs) and
+[bravia-rs](https://github.com/SmartBoy84/bravia-rs).

@@ -1,32 +1,35 @@
 // backend is fully pluggable
 
-use std::{borrow::Cow, ops::Deref};
+use std::str::FromStr;
 
-use http::header::ACCEPT_LANGUAGE;
-use ureq::{
-    self, BodyReader, Cookie,
-    config::Config,
-    http::{Uri, header::AUTHORIZATION},
+use http::{
+    HeaderMap, HeaderName,
+    header::{ACCEPT, ACCEPT_LANGUAGE},
 };
+use ureq::{self, BodyReader, Cookie, RequestBuilder, config::Config, http::Uri};
 
 use crate::{ApiHttpClient, Get, Patch, Post, Put};
+
+const BEARER_TOKEN_HEADER_NAME: &str = "authorization"; // default header name
 
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
     a: ureq::Agent,
-    auth: Cow<'static, str>, // 'static - will store const
-}
 
-const AUTH_HEADER_NAME: &str = "authorization";
+    // allow user to configure their own how they want to
+    headers: HeaderMap,
+}
 
 impl UreqApiHttpClient {
     // apprently, bad practise to enforce constructors with traits...
     pub fn new(agent: &str) -> Self {
         let a = ureq::Agent::new_with_config(Config::builder().user_agent(agent).build());
-        Self {
-            a,
-            auth: AUTH_HEADER_NAME.into(),
-        }
+
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, "*/*".parse().unwrap());
+        headers.insert(ACCEPT_LANGUAGE, "*".parse().unwrap());
+
+        Self { a, headers }
     }
 }
 
@@ -45,62 +48,58 @@ impl ApiHttpClient for UreqApiHttpClient {
         c.release();
     }
 
-    fn set_authorisation_header_name(&mut self, name: &str) {
-        self.auth = name.to_owned().into()
+    /// This should be a set-and-forget at initialisation - this is why I use panicing methods
+    fn set_header(&mut self, key: &str, value: &str) {
+        let cookie_val = value.parse().expect("bad value name");
+        if let Some(val) = self.headers.get_mut(key) {
+            *val = cookie_val;
+        } else {
+            self.headers.insert(
+                HeaderName::from_str(key).expect("bad header name"),
+                value.parse().expect("bad value name"),
+            );
+        }
+    }
+}
+
+impl UreqApiHttpClient {
+    fn append_headers<B>(&self, req: &mut RequestBuilder<B>) {
+        *req.headers_mut().unwrap() = self.headers.clone(); // hm, doesn't seem very efficient...
     }
 }
 
 impl Get for UreqApiHttpClient {
-    fn get(&self, uri: &str, bearer_token: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
-        Ok(self
-            .a
-            .get(uri)
-            .header(ACCEPT_LANGUAGE, "*")
-            .header(self.auth.deref(), bearer_token)
-            .call()?
-            .into_body()
-            .into_reader())
-    }
-}
+    fn get(&self, uri: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
+        let mut req = self.a.get(uri);
+        self.append_headers(&mut req);
 
-impl Patch for UreqApiHttpClient {
-    fn patch(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        Ok(self
-            .a
-            .patch(uri)
-            .header(ACCEPT_LANGUAGE, "*")
-            .header(self.auth.deref(), bearer_token)
-            .content_type("application/json")
-            .send(payload)?
-            .into_body()
-            .into_reader())
-    }
-}
-
-impl Post for UreqApiHttpClient {
-    fn post(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        Ok(self
-            .a
-            .post(uri)
-            .header(ACCEPT_LANGUAGE, "*")
-            .header(self.auth.deref(), bearer_token)
-            .content_type("application/json")
-            .send(payload)?
-            .into_body()
-            .into_reader())
+        Ok(self.a.get(uri).call()?.into_body().into_reader())
     }
 }
 
 impl Put for UreqApiHttpClient {
-    fn put(&self, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        Ok(self
-            .a
-            .put(uri)
-            .header(ACCEPT_LANGUAGE, "*")
-            .header(AUTHORIZATION, bearer_token)
-            .content_type("application/json")
-            .send(payload)?
-            .into_body()
-            .into_reader())
+    fn put(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
+        let mut req = self.a.put(uri);
+        self.append_headers(&mut req);
+
+        Ok(req.send(payload)?.into_body().into_reader())
+    }
+}
+
+impl Post for UreqApiHttpClient {
+    fn post(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
+        let mut req = self.a.post(uri);
+        self.append_headers(&mut req);
+
+        Ok(req.send(payload)?.into_body().into_reader())
+    }
+}
+
+impl Patch for UreqApiHttpClient {
+    fn patch(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
+        let mut req = self.a.patch(uri);
+        self.append_headers(&mut req);
+
+        Ok(req.send(payload)?.into_body().into_reader())
     }
 }

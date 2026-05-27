@@ -86,6 +86,7 @@ impl<Q: QueryPayload> ApiPayload<Q> {
     }
 }
 
+
 #[derive(Debug)]
 // use the more general Endpoint here to avoid leaking implementation detail `Config`
 pub struct ApiRequest<P: Endpoint> {
@@ -116,6 +117,7 @@ impl<E: Endpoint> ApiRequest<E> {
 
 // ensure correct request (with para or not) - page out of the MethodGetter trick in client.rs request() function
 // it works... but the errors are bound to be difficult to interpret
+// <E: Endpoint> says "where ever this trait is used, the Endpoint detail of the type is accessible"
 pub trait ValidRequest<E: Endpoint> {
     fn uri(&self) -> &str;
 }

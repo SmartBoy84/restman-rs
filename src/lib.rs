@@ -29,13 +29,14 @@ pub trait ApiHttpClient {
     type R: std::io::Read;
     type E: std::error::Error;
 
+    // Ideally, these are set and forget - but can mutate these after initialisation safely
     fn set_cookie(&self, cookie: &str, uri: &'static str);
-    fn set_authorisation_header_name(&mut self, name: &str);
+    fn set_header(&mut self, key: &str, value: &str);
 }
 
 pub trait MethodMarker {}
 pub trait MethodMarkerGetter<C: ApiHttpClient>: MethodMarker {
-    fn request(c: &C, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<C::R, C::E>;
+    fn request(c: &C, uri: &str, payload: &[u8]) -> Result<C::R, C::E>;
 }
 
 #[macro_export]
@@ -46,7 +47,6 @@ macro_rules! method {
             fn $getter(
                 &self,
                 uri: &str,
-                bearer_token: &str,
                 payload: &[u8],
             ) -> Result<Self::R, Self::E>;
         }
@@ -55,8 +55,8 @@ macro_rules! method {
         pub struct $name;
         impl MethodMarker for $name {}
         impl<C: $trait> MethodMarkerGetter<C> for $name {
-            fn request(c: &C, uri: &str, bearer_token: &str, payload: &[u8]) -> Result<C::R, C::E> {
-                c.$getter(uri, bearer_token, payload)
+            fn request(c: &C, uri: &str, payload: &[u8]) -> Result<C::R, C::E> {
+                c.$getter(uri, payload)
             }
         }
     };

@@ -11,7 +11,6 @@ pub const AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWe
 pub trait ApiClientServer<C: Server> {}
 
 pub trait ApiClientBackend<C: ApiHttpClient> {
-    fn token(&self) -> &str;
     fn backend(&self) -> &C;
 }
 
@@ -26,7 +25,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
         self.inner_request(r, &[])
     }
 
-    fn send_payload<P: Endpoint<Ser = S>, R: ValidRequest<P>>(
+    fn send_payload<P: Endpoint<Payload: QueryPayload, Ser = S>, R: ValidRequest<P>>(
         &self,
         r: &R,
         p: &ApiPayload<P::Payload>,
@@ -54,6 +53,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
     }
 }
 // access only permitted, if both specified!
+// splitting them allows me to permit user to support multiple server backends
 impl<C: ApiHttpClient, S: Server, T: ApiClientServer<S> + ApiClientBackend<C>> ApiClient<C, S>
     for T
 {
@@ -74,7 +74,7 @@ trait InnerGetter<C: ApiHttpClient, S: Server>: ApiClient<C, S> {
     where
         P::Method: MethodMarkerGetter<C>,
     {
-        Ok(P::Method::request(self.backend(), r.uri(), self.token(), p)
+        Ok(P::Method::request(self.backend(), r.uri(), p)
             .map_err(|e| ApiBackendError::HttpError(e))?)
         // pretty cool - P::Method is MethodMarker - but we enforce that it is also MethodMarkerGetter
         // so no need to do <P::Method as MethodMarkerGetter<C>>::request - just do P::Method::request directly!
