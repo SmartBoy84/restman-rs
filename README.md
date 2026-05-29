@@ -132,7 +132,7 @@ impl<C: ApiHttpClient> MyApiClient<C> {
     fn new(bearer_token: &str) {
         let backend = MyBackend::new();
 
-        backend.set_header(BEARER_TOKEN_HEADER_NAME, bearer_token); // I provide the bearer token header name (default authentication mechanism for most API backends)
+        backend.set_header("authorization", bearer_token); // I provide the bearer token header name (default authentication mechanism for most API backends)
     }
 }
 
@@ -150,6 +150,8 @@ impl<C: ApiHttpClient> ApiClientServer<MyServer> for WorkjamUser<C> {}
 ```
 
 It is the **user's** responsibility to correctly configure the backend (i.e., set all the authorisation headers etc). This library is designed so that each `backend` instance represents a session - I have intentionally not allowed one backend to be used with different tokens.  
+
+Since the backend has to be uniquely configured, that is why accessing the `ApiHttpClient`'s methods requires wrapping the backend struct - this way you can uniquely set which servers that configuration of the backend can handle. Otherwise, a backend whose cookies are configured to handle server `X` may accidently be used to handle queries for server `Y`, producing a chain of errors that becomes difficult to debug.  
 
 ## Making requests
 
@@ -180,7 +182,9 @@ let res: EmployeeRes = client.send_payload(&req, &payload).unwrap();
 ## Custom HTTP backend
 
 The bare minimum is to implement `restman_rs::ApiHttpClient`, then depending on
-which request types required `restman_rs::{GET, PATCH, PUT, POST}`.
+which request types required `restman_rs::{GET, PATCH, PUT, POST}`.  
+
+*Note*; when implementing remember that a user can use one backend for different domains.  
 
 # Why do it this way?
 

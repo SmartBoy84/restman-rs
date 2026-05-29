@@ -1,35 +1,39 @@
 // backend is fully pluggable
 
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use http::{
     HeaderMap, HeaderName,
-    header::{ACCEPT, ACCEPT_LANGUAGE},
+    header::{ACCEPT, ACCEPT_LANGUAGE, COOKIE},
 };
-use ureq::{self, BodyReader, Cookie, RequestBuilder, config::Config, http::Uri};
+use ureq::{self, Agent, BodyReader, RequestBuilder, config::Config};
 
 use crate::{ApiHttpClient, Get, Patch, Post, Put};
 
-const BEARER_TOKEN_HEADER_NAME: &str = "authorization"; // default header name
+pub const BEARER_TOKEN_HEADER_NAME: &str = "authorization"; // default header name
 
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
-    a: ureq::Agent,
-
     // allow user to configure their own how they want to
+    agent: Agent,
     headers: HeaderMap,
+    cookie_jar: HashMap<String, String>,
 }
 
 impl UreqApiHttpClient {
     // apprently, bad practise to enforce constructors with traits...
     pub fn new(agent: &str) -> Self {
-        let a = ureq::Agent::new_with_config(Config::builder().user_agent(agent).build());
+        // let a = ureq::Agent::new_with_config(Config::builder().user_agent(agent).build());
 
         let mut headers = HeaderMap::new();
         headers.insert(ACCEPT, "*/*".parse().unwrap());
         headers.insert(ACCEPT_LANGUAGE, "*".parse().unwrap());
 
-        Self { a, headers }
+        Self {
+            headers,
+            agent: Agent::new_with_config(Config::builder().user_agent(agent).build()),
+            cookie_jar: HashMap::new(),
+        }
     }
 }
 
@@ -38,14 +42,30 @@ impl ApiHttpClient for UreqApiHttpClient {
     type E = ureq::Error;
 
     // uri is const - 'static enforces that
-    fn set_cookie(&self, cookie: &str, uri: &'static str) {
-        let mut c = self.a.cookie_jar_lock();
+    fn set_cookie(&mut self, name: &str, value: &str) {
+        self.cookie_jar.insert(name.to_string(), value.to_string());
 
-        let uri = Uri::from_static(uri);
-        let cookie = Cookie::parse(cookie.to_owned(), &uri).unwrap();
+        // regenerate cookie header
+        let mut cookie_header = String::new();
+        cookie_header.reserve(
+            self.cookie_jar
+                .iter()
+                .map(|(k, v)| k.len() + v.len() + 2)
+                .sum(),
+        );
 
-        c.insert(cookie, &uri).unwrap();
-        c.release();
+        for (i, (k, v)) in self.cookie_jar.iter().enumerate() {
+            if i > 0 {
+                cookie_header.push(';');
+            }
+            cookie_header.push_str(k);
+            cookie_header.push('=');
+            cookie_header.push_str(v);
+        }
+
+        // add back cookie header
+        self.headers
+            .insert(COOKIE, cookie_header.try_into().expect("bad cookie"));
     }
 
     /// This should be a set-and-forget at initialisation - this is why I use panicing methods
@@ -70,16 +90,16 @@ impl UreqApiHttpClient {
 
 impl Get for UreqApiHttpClient {
     fn get(&self, uri: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
-        let mut req = self.a.get(uri);
+        let mut req = self.agent.get(uri);
         self.append_headers(&mut req);
 
-        Ok(self.a.get(uri).call()?.into_body().into_reader())
+        Ok(req.call()?.into_body().into_reader())
     }
 }
 
 impl Put for UreqApiHttpClient {
     fn put(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        let mut req = self.a.put(uri);
+        let mut req = self.agent.put(uri);
         self.append_headers(&mut req);
 
         Ok(req.send(payload)?.into_body().into_reader())
@@ -88,7 +108,7 @@ impl Put for UreqApiHttpClient {
 
 impl Post for UreqApiHttpClient {
     fn post(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        let mut req = self.a.post(uri);
+        let mut req = self.agent.post(uri);
         self.append_headers(&mut req);
 
         Ok(req.send(payload)?.into_body().into_reader())
@@ -97,7 +117,9 @@ impl Post for UreqApiHttpClient {
 
 impl Patch for UreqApiHttpClient {
     fn patch(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        let mut req = self.a.patch(uri);
+        println!("{}", self.headers.get(COOKIE).unwrap().to_str().unwrap());
+
+        let mut req = self.agent.patch(uri);
         self.append_headers(&mut req);
 
         Ok(req.send(payload)?.into_body().into_reader())

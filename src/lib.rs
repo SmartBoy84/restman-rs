@@ -29,8 +29,9 @@ pub trait ApiHttpClient {
     type R: std::io::Read;
     type E: std::error::Error;
 
-    // Ideally, these are set and forget - but can mutate these after initialisation safely
-    fn set_cookie(&self, cookie: &str, uri: &'static str);
+    // Ideally, these are set and forget
+    // set the COOKIE header here because you don't know target URI here
+    fn set_cookie(&mut self, name: &str, value: &str);
     fn set_header(&mut self, key: &str, value: &str);
 }
 
@@ -44,11 +45,7 @@ macro_rules! method {
     ($name:ident, $trait:ident, $getter:ident) => {
         // create the method trait for http clients to implement
         pub trait $trait: ApiHttpClient {
-            fn $getter(
-                &self,
-                uri: &str,
-                payload: &[u8],
-            ) -> Result<Self::R, Self::E>;
+            fn $getter(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E>;
         }
 
         // create a method marker struct to set in endpoints
