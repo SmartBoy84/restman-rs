@@ -182,9 +182,15 @@ let res: EmployeeRes = client.send_payload(&req, &payload).unwrap();
 ## Custom HTTP backend
 
 The bare minimum is to implement `restman_rs::ApiHttpClient`, then depending on
-which request types required `restman_rs::{GET, PATCH, PUT, POST}`.  
+which request types implement: `restman_rs::{GET, PATCH, PUT, POST}` for synchronous functionality or the asynchronous analogues `restman_rs::{AGET, APATCH, APUT, APOST}`.  
 
 *Note*; when implementing remember that a user can use one backend for different domains.  
+
+### Default backends
+
+Crate comes with two backends; `ureq` and `reqwest` which can be enabled using their respective flags (e.g., `cargo add ... -F ureq`).  
+
+Since `reqwest` is significantly heavier than `ureq`, I have reserved it solely for asynchronous applications - it does not implement any of the synchronous methods. Use `ureq` for synchronous applications as it is significantly lighter.  
 
 # Why do it this way?
 
