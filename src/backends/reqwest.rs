@@ -1,27 +1,26 @@
 // GPT generated - TODO: implement yourself (I think there are several inefficiencies)
 
-use std::{io::Cursor, str::FromStr, sync::Arc};
+use std::{collections::HashMap, io::Cursor};
 
 use bytes::Bytes;
 use reqwest::{
-    cookie::Jar,
-    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue},
+    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, HeaderMap, HeaderValue},
     Client,
-    Url,
 };
 
-use crate::{AGet, APatch, APost, APut, ApiHttpClient};
+use crate::{ADelete, AGet, APatch, APost, APut, ApiHttpClient};
+
+use super::ConvenienceImpl;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestApiHttpClient {
     client: Client,
     headers: HeaderMap,
-    cookies: Arc<Jar>,
-    base_url: Url,
+    cookie_jar: HashMap<String, String>,
 }
 
 impl ReqwestApiHttpClient {
-    pub fn new(agent: &str, base_url: &str) -> Self {
+    pub fn new(agent: &str) -> Self {
         let mut headers = HeaderMap::new();
 
         headers.insert(
@@ -31,21 +30,16 @@ impl ReqwestApiHttpClient {
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
         headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("*"));
 
-        let cookies = Arc::new(Jar::default());
-
         let client = Client::builder()
             .user_agent(agent)
-            .cookie_provider(cookies.clone())
             .build()
             .unwrap();
 
-        let base_url = Url::parse(base_url).expect("invalid base url");
 
         Self {
             client,
             headers,
-            cookies,
-            base_url,
+            cookie_jar: HashMap::new(),
         }
     }
 
@@ -69,26 +63,25 @@ impl ReqwestApiHttpClient {
     }
 }
 
+impl ConvenienceImpl for ReqwestApiHttpClient {
+    fn get_headers(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+    fn get_cookie_jar(&mut self) -> &mut HashMap<String, String> {
+        &mut self.cookie_jar
+    }
+}
+
 impl ApiHttpClient for ReqwestApiHttpClient {
     type R = Cursor<Vec<u8>>;
     type E = reqwest::Error;
 
-    fn set_cookie(&mut self, name: &str, value: &str) {
-        let cookie = format!("{name}={value}");
-
-        self.cookies.add_cookie_str(&cookie, &self.base_url);
+    fn set_cookie(&mut self, name: &str, value: &str, root: &str) {
+        ConvenienceImpl::set_cookie(self, name, value, root);
     }
 
     fn set_header(&mut self, key: &str, value: &str) {
-        let Ok(name) = HeaderName::from_str(key) else {
-            return;
-        };
-
-        let Ok(val) = HeaderValue::from_str(value) else {
-            return;
-        };
-
-        self.headers.insert(name, val);
+        ConvenienceImpl::set_header(self, key, value);
     }
 }
 
@@ -99,6 +92,18 @@ impl AGet for ReqwestApiHttpClient {
         _payload: &[u8],
     ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
         let req = self.apply_headers(self.client.get(uri));
+
+        async move { self.send_with_body(req).await }
+    }
+}
+
+impl ADelete for ReqwestApiHttpClient {
+    fn async_delete(
+        &self,
+        uri: &str,
+        _payload: &[u8],
+    ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
+        let req = self.apply_headers(self.client.delete(uri));
 
         async move { self.send_with_body(req).await }
     }

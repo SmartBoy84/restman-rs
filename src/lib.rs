@@ -31,7 +31,7 @@ pub trait ApiHttpClient {
 
     // Ideally, these are set and forget
     // set the COOKIE header here because you don't know target URI here
-    fn set_cookie(&mut self, name: &str, value: &str);
+    fn set_cookie(&mut self, name: &str, value: &str, root: &str);
     fn set_header(&mut self, key: &str, value: &str);
 }
 
@@ -93,6 +93,7 @@ macro_rules! method {
 
 // sync
 method!(GET, Get, get);
+method!(DELETE, Delete, delete);
 method!(PATCH, Patch, patch);
 method!(POST, Post, post);
 method!(PUT, Put, put);

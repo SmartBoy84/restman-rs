@@ -1,14 +1,16 @@
 // backend is fully pluggable
 
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use http::{
-    HeaderMap, HeaderName,
-    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, COOKIE},
+    HeaderMap,
+    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE},
 };
 use ureq::{self, Agent, BodyReader, RequestBuilder, config::Config};
 
-use crate::{ApiHttpClient, Get, Patch, Post, Put};
+use crate::{ApiHttpClient, Delete, Get, Patch, Post, Put};
+
+use super::ConvenienceImpl;
 
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
@@ -39,48 +41,28 @@ impl UreqApiHttpClient {
     }
 }
 
+impl ConvenienceImpl for UreqApiHttpClient {
+    fn get_headers(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
+    fn get_cookie_jar(&mut self) -> &mut HashMap<String, String> {
+        &mut self.cookie_jar
+    }
+}
+
 impl ApiHttpClient for UreqApiHttpClient {
     type R = BodyReader<'static>; // not streaming, so 'static is fine
     type E = ureq::Error;
 
     // uri is const - 'static enforces that
-    fn set_cookie(&mut self, name: &str, value: &str) {
-        self.cookie_jar.insert(name.to_string(), value.to_string());
-
-        // regenerate cookie header
-        let mut cookie_header = String::new();
-        cookie_header.reserve(
-            self.cookie_jar
-                .iter()
-                .map(|(k, v)| k.len() + v.len() + 2)
-                .sum(),
-        );
-
-        for (i, (k, v)) in self.cookie_jar.iter().enumerate() {
-            if i > 0 {
-                cookie_header.push(';');
-            }
-            cookie_header.push_str(k);
-            cookie_header.push('=');
-            cookie_header.push_str(v);
-        }
-
-        // add back cookie header
-        self.headers
-            .insert(COOKIE, cookie_header.try_into().expect("bad cookie"));
+    fn set_cookie(&mut self, name: &str, value: &str, root: &str) {
+        ConvenienceImpl::set_cookie(self, name, value, root);
     }
 
     /// This should be a set-and-forget at initialisation - this is why I use panicing methods
     fn set_header(&mut self, key: &str, value: &str) {
-        let cookie_val = value.parse().expect("bad value name");
-        if let Some(val) = self.headers.get_mut(key) {
-            *val = cookie_val;
-        } else {
-            self.headers.insert(
-                HeaderName::from_str(key).expect("bad header name"),
-                value.parse().expect("bad value name"),
-            );
-        }
+        ConvenienceImpl::set_header(self, key, value);
     }
 }
 
@@ -93,6 +75,15 @@ impl UreqApiHttpClient {
 impl Get for UreqApiHttpClient {
     fn get(&self, uri: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
         let mut req = self.agent.get(uri);
+        self.append_headers(&mut req);
+
+        Ok(req.call()?.into_body().into_reader())
+    }
+}
+
+impl Delete for UreqApiHttpClient {
+    fn delete(&self, uri: &str, _payload: &[u8]) -> Result<Self::R, Self::E> {
+        let mut req = self.agent.delete(uri);
         self.append_headers(&mut req);
 
         Ok(req.call()?.into_body().into_reader())
