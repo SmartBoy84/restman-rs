@@ -1,4 +1,6 @@
-# WARNING - this was fully generated with ChatGPT
+# Bon macro
+> The *code* was AI generated, but the following write-up and the actual idea for this is *completely* human!
+
 It is a proc-macro which simplifies the type-state config pattern using Bon that I implement manually in [hecko](https://github.com/SmartBoy84/hecko). It's important to note that this type-state config pattern is itself a simplification of the fully manual type-state implementation (no crate) that I do in [workjam-rs]().  
 
 In both of the following cases, if the field name is `field_name` then the trait is `HasFieldName` and the getter is `field_name`. So a request part using it would be written as `request_part!(PartName, "part_name", (), HasFieldName, field_name);`. Macro magic! 
