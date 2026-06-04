@@ -1,45 +1,71 @@
-use std::{collections::HashMap, io::Cursor, str::FromStr};
+// GPT generated - TODO: implement yourself (I think there are several inefficiencies)
 
+use std::{io::Cursor, str::FromStr, sync::Arc};
+
+use bytes::Bytes;
 use reqwest::{
+    cookie::Jar,
+    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue},
     Client,
-    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, COOKIE, HeaderMap, HeaderName, HeaderValue},
+    Url,
 };
 
 use crate::{AGet, APatch, APost, APut, ApiHttpClient};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReqwestApiHttpClient {
     client: Client,
     headers: HeaderMap,
-    cookie_jar: HashMap<String, String>,
+    cookies: Arc<Jar>,
+    base_url: Url,
 }
 
 impl ReqwestApiHttpClient {
-    pub fn new(agent: &str) -> Self {
+    pub fn new(agent: &str, base_url: &str) -> Self {
         let mut headers = HeaderMap::new();
 
-        headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-        headers.insert(ACCEPT, "*/*".parse().unwrap());
-        headers.insert(ACCEPT_LANGUAGE, "*".parse().unwrap());
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("*"));
+
+        let cookies = Arc::new(Jar::default());
+
+        let client = Client::builder()
+            .user_agent(agent)
+            .cookie_provider(cookies.clone())
+            .build()
+            .unwrap();
+
+        let base_url = Url::parse(base_url).expect("invalid base url");
 
         Self {
+            client,
             headers,
-            client: Client::builder().user_agent(agent).build().unwrap(),
-            cookie_jar: HashMap::new(),
+            cookies,
+            base_url,
         }
     }
 
-    fn append_headers(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        req.headers(self.headers.clone())
+    fn apply_headers(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        for (k, v) in self.headers.iter() {
+            req = req.header(k, v);
+        }
+        req
+    }
+
+    fn body_bytes(payload: &[u8]) -> Bytes {
+        Bytes::copy_from_slice(payload) // eek - anyway to avoid this intermediate allocation? TODO
     }
 
     async fn send_with_body(
         &self,
         req: reqwest::RequestBuilder,
     ) -> Result<Cursor<Vec<u8>>, reqwest::Error> {
-        let response = req.send().await?;
-        let bytes = response.bytes().await?;
-        Ok(Cursor::new(bytes.to_vec()))
+        let bytes = req.send().await?.bytes().await?;
+        Ok(Cursor::new(bytes.to_vec())) // this is fine - read the response fully
     }
 }
 
@@ -48,39 +74,21 @@ impl ApiHttpClient for ReqwestApiHttpClient {
     type E = reqwest::Error;
 
     fn set_cookie(&mut self, name: &str, value: &str) {
-        self.cookie_jar.insert(name.to_string(), value.to_string());
+        let cookie = format!("{name}={value}");
 
-        let mut cookie_header = String::new();
-        cookie_header.reserve(
-            self.cookie_jar
-                .iter()
-                .map(|(k, v)| k.len() + v.len() + 2)
-                .sum(),
-        );
-
-        for (i, (k, v)) in self.cookie_jar.iter().enumerate() {
-            if i > 0 {
-                cookie_header.push(';');
-            }
-            cookie_header.push_str(k);
-            cookie_header.push('=');
-            cookie_header.push_str(v);
-        }
-
-        self.headers
-            .insert(COOKIE, cookie_header.try_into().expect("bad cookie"));
+        self.cookies.add_cookie_str(&cookie, &self.base_url);
     }
 
     fn set_header(&mut self, key: &str, value: &str) {
-        let header_value: HeaderValue = value.parse().expect("bad value name");
-        if let Some(val) = self.headers.get_mut(key) {
-            *val = header_value;
-        } else {
-            self.headers.insert(
-                HeaderName::from_str(key).expect("bad header name"),
-                value.parse().expect("bad value name"),
-            );
-        }
+        let Ok(name) = HeaderName::from_str(key) else {
+            return;
+        };
+
+        let Ok(val) = HeaderValue::from_str(value) else {
+            return;
+        };
+
+        self.headers.insert(name, val);
     }
 }
 
@@ -90,7 +98,7 @@ impl AGet for ReqwestApiHttpClient {
         uri: &str,
         _payload: &[u8],
     ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
-        let req = self.append_headers(self.client.get(uri));
+        let req = self.apply_headers(self.client.get(uri));
 
         async move { self.send_with_body(req).await }
     }
@@ -103,8 +111,8 @@ impl APut for ReqwestApiHttpClient {
         payload: &[u8],
     ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
         let req = self
-            .append_headers(self.client.put(uri))
-            .body(payload.to_vec());
+            .apply_headers(self.client.put(uri))
+            .body(Self::body_bytes(payload));
 
         async move { self.send_with_body(req).await }
     }
@@ -117,8 +125,8 @@ impl APost for ReqwestApiHttpClient {
         payload: &[u8],
     ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
         let req = self
-            .append_headers(self.client.post(uri))
-            .body(payload.to_vec());
+            .apply_headers(self.client.post(uri))
+            .body(Self::body_bytes(payload));
 
         async move { self.send_with_body(req).await }
     }
@@ -131,8 +139,8 @@ impl APatch for ReqwestApiHttpClient {
         payload: &[u8],
     ) -> impl std::future::Future<Output = Result<Self::R, Self::E>> + Send {
         let req = self
-            .append_headers(self.client.patch(uri))
-            .body(payload.to_vec());
+            .apply_headers(self.client.patch(uri))
+            .body(Self::body_bytes(payload));
 
         async move { self.send_with_body(req).await }
     }
