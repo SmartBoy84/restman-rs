@@ -1,7 +1,7 @@
 pub mod endpoints;
 mod parts;
 
-use std::marker::PhantomData;
+use std::{fmt::Display, marker::PhantomData};
 
 use endpoints::Endpoint;
 use serde::Serialize;
@@ -72,9 +72,15 @@ pub struct ApiPayload<Q: QueryPayload> {
     _payload: PhantomData<Q>,
 }
 
+impl<Q: QueryPayload> Display for ApiPayload<Q> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.payload())
+    }
+}
+
 // QueryPayload, ApiPayload - runnin' outta names here man ;(
 impl<Q: QueryPayload> ApiPayload<Q> {
-    pub fn new(value: Q) -> serde_json::Result<Self> {
+    pub fn new(value: &Q) -> serde_json::Result<Self> {
         let data = serde_json::to_string(&value)?;
         Ok(Self {
             data,
@@ -85,7 +91,6 @@ impl<Q: QueryPayload> ApiPayload<Q> {
         &self.data
     }
 }
-
 
 #[derive(Debug)]
 // use the more general Endpoint here to avoid leaking implementation detail `Config`

@@ -1,6 +1,6 @@
+pub mod backends;
 pub mod client;
 pub mod request;
-pub mod ureq;
 
 use thiserror::Error;
 
@@ -39,6 +39,13 @@ pub trait MethodMarker {}
 pub trait MethodMarkerGetter<C: ApiHttpClient>: MethodMarker {
     fn request(c: &C, uri: &str, payload: &[u8]) -> Result<C::R, C::E>;
 }
+pub trait AsyncMethodMarkerGetter<C: ApiHttpClient>: MethodMarker {
+    fn async_request(
+        c: &C,
+        uri: &str,
+        payload: &[u8],
+    ) -> impl Future<Output = Result<C::R, C::E>> + Send;
+}
 
 #[macro_export]
 macro_rules! method {
@@ -46,6 +53,13 @@ macro_rules! method {
         // create the method trait for http clients to implement
         pub trait $trait: ApiHttpClient {
             fn $getter(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E>;
+        }
+
+        // create async version
+        paste::paste! {
+            pub trait [<A$trait>]: ApiHttpClient {
+                fn [<async_$getter>](&self, uri: &str, payload: &[u8]) -> impl Future<Output = Result<Self::R, Self::E>> + Send;
+            }
         }
 
         // create a method marker struct to set in endpoints
@@ -56,9 +70,28 @@ macro_rules! method {
                 c.$getter(uri, payload)
             }
         }
+
+        paste::paste! {
+            impl<C> [<AsyncMethodMarkerGetter>]<C> for $name
+            where
+                C: [<A$trait>] + Sync,
+            {
+                fn async_request(
+                    c: &C,
+                    uri: &str,
+                    payload: &[u8],
+                ) -> impl Future<Output = Result<C::R, C::E>> + Send {
+                    async move {
+                        c.[<async_$getter>](uri, payload).await
+                    }
+                }
+
+            }
+        }
     };
 }
 
+// sync
 method!(GET, Get, get);
 method!(PATCH, Patch, patch);
 method!(POST, Post, post);

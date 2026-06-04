@@ -2,17 +2,9 @@ use std::io::Read;
 
 use crate::{
     ApiBackendError, ApiBackendResult, ApiHttpClient, MethodMarkerGetter, Server,
+    client::{ApiClientBackend, ApiClientServer},
     request::{ApiPayload, QueryPayload, ValidRequest, endpoints::Endpoint},
 };
-
-pub const AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0";
-
-// split server and client config into separate traits to allow backend to separate multiple servers
-pub trait ApiClientServer<C: Server> {}
-
-pub trait ApiClientBackend<C: ApiHttpClient> {
-    fn backend(&self) -> &C;
-}
 
 pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClientBackend<C> {
     fn request<P: Endpoint<Payload = (), Ser = S>, R: ValidRequest<P>>(
@@ -20,7 +12,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
         r: &R,
     ) -> ApiBackendResult<P::Res, C>
     where
-        P::Method: MethodMarkerGetter<C>, // so awesome
+        P::Method: MethodMarkerGetter<C>,
     {
         self.inner_request(r, &[])
     }
@@ -31,7 +23,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
         p: &ApiPayload<P::Payload>,
     ) -> ApiBackendResult<P::Res, C>
     where
-        P::Method: MethodMarkerGetter<C>, // so awesome
+        P::Method: MethodMarkerGetter<C>,
         P::Payload: QueryPayload,
     {
         self.inner_request(r, p.payload().as_bytes())
@@ -43,7 +35,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
         p: &[u8],
     ) -> ApiBackendResult<String, C>
     where
-        P::Method: MethodMarkerGetter<C>, // so awesome
+        P::Method: MethodMarkerGetter<C>,
     {
         let mut s = String::new();
         self.inner_raw_request(r, p)?
@@ -52,6 +44,7 @@ pub trait ApiClient<C: ApiHttpClient, S: Server>: ApiClientServer<S> + ApiClient
         Ok(s)
     }
 }
+
 // access only permitted, if both specified!
 // splitting them allows me to permit user to support multiple server backends
 impl<C: ApiHttpClient, S: Server, T: ApiClientServer<S> + ApiClientBackend<C>> ApiClient<C, S>
@@ -61,7 +54,6 @@ impl<C: ApiHttpClient, S: Server, T: ApiClientServer<S> + ApiClientBackend<C>> A
 
 // seal this trait - external users shouldn't be able to see it
 trait InnerGetter<C: ApiHttpClient, S: Server>: ApiClient<C, S> {
-    // FUCK, you can set bounds on associated types?! This simplifies so much shit
     /*
     enforce that the method is one that implements the getter trait for our client
     -> this way I can move the generic out from Endpoint and keep it independent from the client!
@@ -91,4 +83,5 @@ trait InnerGetter<C: ApiHttpClient, S: Server>: ApiClient<C, S> {
         Ok(serde_json::from_reader(self.inner_raw_request(r, p)?)?)
     }
 }
+
 impl<C: ApiHttpClient, S: Server, T: ApiClient<C, S> + ?Sized> InnerGetter<C, S> for T {}

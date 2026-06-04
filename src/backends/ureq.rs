@@ -4,13 +4,11 @@ use std::{collections::HashMap, str::FromStr};
 
 use http::{
     HeaderMap, HeaderName,
-    header::{ACCEPT, ACCEPT_LANGUAGE, COOKIE},
+    header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, COOKIE},
 };
 use ureq::{self, Agent, BodyReader, RequestBuilder, config::Config};
 
 use crate::{ApiHttpClient, Get, Patch, Post, Put};
-
-pub const BEARER_TOKEN_HEADER_NAME: &str = "authorization"; // default header name
 
 #[derive(Debug)]
 pub struct UreqApiHttpClient {
@@ -26,6 +24,10 @@ impl UreqApiHttpClient {
         // let a = ureq::Agent::new_with_config(Config::builder().user_agent(agent).build());
 
         let mut headers = HeaderMap::new();
+
+        // safe deafult, but may need to adjust depending on application
+        headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+        // headers.insert(ACCEPT_CHARSET, "utf-8".parse().unwrap());
         headers.insert(ACCEPT, "*/*".parse().unwrap());
         headers.insert(ACCEPT_LANGUAGE, "*".parse().unwrap());
 
@@ -117,8 +119,6 @@ impl Post for UreqApiHttpClient {
 
 impl Patch for UreqApiHttpClient {
     fn patch(&self, uri: &str, payload: &[u8]) -> Result<Self::R, Self::E> {
-        println!("{}", self.headers.get(COOKIE).unwrap().to_str().unwrap());
-
         let mut req = self.agent.patch(uri);
         self.append_headers(&mut req);
 
